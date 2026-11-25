@@ -1,0 +1,475 @@
+<!DOCTYPE HTML>
+<HTML>
+	<HEAD>
+		<TITLE> Conversor de texto a logica proposicional/circuitos </TITLE>
+	</HEAD>
+	<BODY BGCOLOR="#ECF5BF">
+	<CENTER>
+			<H2> ¡Bienvenid@ a nuestro programa! </H2> <BR>
+			<HR WIDTH="100%" SIZE="3" NOSHADE>
+			<H3> Aqui podrás convertir texto a lógica proposicional o circuitos </H3><BR>
+	<LABEL FOR="MODO"><B>Seleccione a que quiere convertir el texto:</B></LABEL>
+	<SELECT ID="MODO">
+		<OPTION VALUE="LOGICA"> Texto a lógica propiscional</OPTION>
+		<OPTION VALUE="CIRCUITO"> Texto a circuitos</OPTION>
+</SELECT>
+	<INPUT TYPE="TEXT" ID="TEXTO-ENTRADA">
+<BUTTON TYPE="BUTTON" ID="BTN-TRADUCIR">Traducir texto</BUTTON>
+	<BR><BR<BR>
+	<DIV ID="RESULTADO" STYLE="WIDTH:60%; MIN HEIGHT: 150PX; BORDER: 2PX SOLID BLACK; BACKGROUND-COLOR: #FFFFFF; PADDING: 10PX;"></DIV>
+	
+<script>
+  const btnTraducir = document.getElementById("BTN-TRADUCIR");
+  const selectModo = document.getElementById("MODO");
+  const inputTexto = document.getElementById("TEXTO-ENTRADA");
+  const divResultado = document.getElementById("RESULTADO");
+  btnTraducir.addEventListener("click", function () {
+    const modo = selectModo.value;
+    const textoOriginal = inputTexto.value.trim();
+
+    if (textoOriginal === "") {
+
+      divResultado.innerHTML = "<p><b>Escribe una oracion primero.</b></p>";
+      return;
+    }
+
+    const texto = textoOriginal.toLowerCase();
+    const expresion = convertirAExpresion(texto);
+
+    if (modo === "LOGICA") {
+      divResultado.innerHTML = generarTablaVerdad(textoOriginal, expresion);
+    } else {
+      divResultado.innerHTML = generarCircuito(textoOriginal, expresion);
+    }
+  });
+
+  function convertirAExpresion(texto) {
+    const letras = ["p", "q", "r", "s", "t", "u", "v", "w"];
+    const mapaVars = new Map();
+    let contador = 0;
+
+    function asignarLetra(frase) {
+      let limpia = frase
+        .trim()
+        .replace(/^(si|entonces|y|o|pero|aunque|sino)\s+/gi, "")
+        .replace(/^(no|nunca|jamas|jamás)\s+/i, "")
+        .replace(/[.,;]+$/g, "")
+        .trim();
+
+      const negada = /^(no|nunca|jamas|jamás)\s+/i.test(
+        frase.trim().replace(/^(si|entonces|y|o|pero|aunque|sino)\s+/gi, "")
+      );
+
+      if (!limpia) {
+        return negada ? "~p" : "p";
+      }
+
+      if (!mapaVars.has(limpia)) {
+        const letra = letras[contador] || ("x" + (contador + 1));
+        mapaVars.set(limpia, letra);
+        contador++;
+      }
+
+      const letraAsignada = mapaVars.get(limpia);
+      return negada ? "~" + letraAsignada : letraAsignada;
+    }
+
+    function parsearConector(bloque) {
+      const limpio = bloque.trim().replace(/^[.,;]+|[.,;]+$/g, "");
+      if (!limpio) return "";
+
+      const partes = limpio.split(/(\s+(?:y|pero|aunque|o)\s+|,\s*)/i);
+      let resultado = "";
+      let opPendiente = "";
+
+      for (let i = 0; i < partes.length; i++) {
+        const token = partes[i];
+        if (!token || !token.trim()) continue;
+
+        const tLow = token.trim().toLowerCase();
+
+        if (tLow === "y" || tLow === "pero" || tLow === "aunque") {
+          opPendiente = " ^ ";
+        } else if (tLow === "o") {
+          opPendiente = " v ";
+        } else if (tLow === ",") {
+          if (resultado && !opPendiente) {
+            opPendiente = " ^ ";
+          }
+        } else {
+          const varExpr = asignarLetra(token);
+          if (!resultado) {
+            resultado = varExpr;
+          } else {
+            resultado += (opPendiente || " ^ ") + varExpr;
+            opPendiente = "";
+          }
+        }
+      }
+
+      return resultado;
+    }
+
+    if (texto.indexOf("si y solo si") !== -1) {
+      const partes = texto.split("si y solo si");
+      const izq = parsearConector(partes[0]);
+      const der = parsearConector(partes[1]);
+      return "(" + izq + " <-> " + der + ")";
+    }
+
+    if (texto.indexOf("entonces") !== -1) {
+      const sinSi = texto.replace(/^si[\s,]+/, "");
+      const partes = sinSi.split(/\s*,?\s*entonces\s+/i);
+      const ant = parsearConector(partes[0]);
+      const cons = parsearConector(partes[1]);
+      return "(" + ant + " -> " + cons + ")";
+    }
+
+    if (texto.indexOf("si ") === 0 || texto.indexOf("si,") === 0) {
+      const cuerpo = texto.replace(/^si[\s,]+/, "");
+      let partes = [];
+
+      if (cuerpo.indexOf(",") !== -1) {
+        partes = cuerpo.split(",");
+      } else {
+        const matchNeg = cuerpo.match(/^(.+?)\s+((?:no|nunca|jamas|jamás)\s+.+)$/i);
+        if (matchNeg) {
+          partes = [matchNeg[1], matchNeg[2]];
+        } else {
+          const palabras = cuerpo.trim().split(/\s+/);
+          const mitad = Math.ceil(palabras.length / 2);
+          partes = [palabras.slice(0, mitad).join(" "), palabras.slice(mitad).join(" ")];
+        }
+      }
+
+      const ant = parsearConector(partes[0]);
+      const cons = parsearConector(partes[1]);
+      return "(" + ant + " -> " + cons + ")";
+    }
+
+    const general = parsearConector(texto);
+    if (general) return general;
+
+    if (/^(no|nunca|jamas|jamás)\s+/i.test(texto)) {
+      return asignarLetra(texto);
+    }
+
+    return "p";
+  }
+
+  function limpiarProp(fragmento, letraBase) {
+    if (!fragmento) return { simbolo: letraBase, negada: false };
+    const limpio = fragmento.trim();
+    if (/^(no|nunca|jamas|jamás)\s+/i.test(limpio)) {
+      return { simbolo: "~" + letraBase, negada: true };
+    }
+    return { simbolo: letraBase, negada: false };
+  }
+
+  function evaluarExpresionLogica(expr, valores) {
+    let jsExpr = expr.trim();
+    while (jsExpr.startsWith("(") && jsExpr.endsWith(")") && parentesisBalanceados(jsExpr.slice(1, -1))) {
+      jsExpr = jsExpr.slice(1, -1).trim();
+    }
+
+    const idxBicond = buscarOperadorPrincipal(jsExpr, "<->");
+    if (idxBicond !== -1) {
+      const izq = evaluarExpresionLogica(jsExpr.slice(0, idxBicond), valores);
+      const der = evaluarExpresionLogica(jsExpr.slice(idxBicond + 3), valores);
+      return izq === der ? 1 : 0;
+    }
+
+    const idxCond = buscarOperadorPrincipal(jsExpr, "->");
+    if (idxCond !== -1) {
+      const ant = evaluarExpresionLogica(jsExpr.slice(0, idxCond), valores);
+      const cons = evaluarExpresionLogica(jsExpr.slice(idxCond + 2), valores);
+      return (ant === 1 && cons === 0) ? 0 : 1;
+    }
+
+    const idxOr = buscarOperadorPrincipal(jsExpr, " v ");
+    if (idxOr !== -1) {
+      const izq = evaluarExpresionLogica(jsExpr.slice(0, idxOr), valores);
+      const der = evaluarExpresionLogica(jsExpr.slice(idxOr + 3), valores);
+      return (izq === 1 || der === 1) ? 1 : 0;
+    }
+
+    const idxAnd = buscarOperadorPrincipal(jsExpr, " ^ ");
+    if (idxAnd !== -1) {
+      const izq = evaluarExpresionLogica(jsExpr.slice(0, idxAnd), valores);
+      const der = evaluarExpresionLogica(jsExpr.slice(idxAnd + 3), valores);
+      return (izq === 1 && der === 1) ? 1 : 0;
+    }
+
+    if (jsExpr.startsWith("~")) {
+      const interna = evaluarExpresionLogica(jsExpr.slice(1), valores);
+      return interna === 1 ? 0 : 1;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(valores, jsExpr)) {
+      return valores[jsExpr];
+    }
+
+    return 0;
+  }
+
+  function parentesisBalanceados(str) {
+    let nivel = 0;
+    for (let i = 0; i < str.length; i++) {
+      if (str[i] === "(") nivel++;
+      else if (str[i] === ")") {
+        nivel--;
+        if (nivel < 0) return false;
+      }
+    }
+    return nivel === 0;
+  }
+
+  function buscarOperadorPrincipal(str, op) {
+    let nivel = 0;
+    for (let i = 0; i <= str.length - op.length; i++) {
+      if (str[i] === "(") nivel++;
+      else if (str[i] === ")") nivel--;
+      else if (nivel === 0 && str.slice(i, i + op.length) === op) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function generarTablaVerdad(original, expresion) {
+    const encontradas = [];
+    const matches = expresion.match(/\b([a-z]\d*)\b/g) || [];
+    for (let i = 0; i < matches.length; i++) {
+      const v = matches[i];
+      if (v !== "v" && encontradas.indexOf(v) === -1) {
+        encontradas.push(v);
+      }
+    }
+    const varsTabla = encontradas.length > 0 ? encontradas : ["p", "q"];
+    const totalFilas = Math.pow(2, varsTabla.length);
+
+    let encabezados = "";
+    for (let i = 0; i < varsTabla.length; i++) {
+      encabezados += "<th>" + varsTabla[i] + "</th>";
+    }
+    encabezados += "<th>" + expresion + "</th>";
+
+    let cuerpoFilas = "";
+    for (let fila = 0; fila < totalFilas; fila++) {
+      const valores = {};
+      let celdas = "";
+
+      for (let col = 0; col < varsTabla.length; col++) {
+        const bit = (fila >> (varsTabla.length - 1 - col)) & 1 ? 0 : 1;
+        valores[varsTabla[col]] = bit;
+        celdas += "<td>" + bit + "</td>";
+      }
+
+      const res = evaluarExpresionLogica(expresion, valores);
+      celdas += "<td><b>" + res + "</b></td>";
+      cuerpoFilas += "<tr>" + celdas + "</tr>";
+    }
+
+    return (
+      "<p><b>Texto:</b> " + original + "</p>" +
+      "<p><b>Expresion logica:</b> <b>" + expresion + "</b></p>" +
+      "<table border='1' cellpadding='6' cellspacing='0' style='margin: 10px auto; border-collapse: collapse;'>" +
+      "<tr>" + encabezados + "</tr>" +
+      cuerpoFilas +
+      "</table>"
+    );
+  }
+
+function generarCircuito(original, expresion) {
+    const arbol = parsearArbolExpresion(expresion);
+    const svgDiagrama = renderizarCircuitoSVG(arbol);
+
+    return (
+      "<p><b>Texto:</b> " + original + "</p>" +
+      "<p><b>Expresion:</b> " + expresion + "</p>" +
+      "<p><b>Circuito lógico multinivel:</b></p>" +
+      svgDiagrama +
+      "<p><small>Entradas a la izquierda, compuertas en cascada según la expresión y salida <b>S</b> a la derecha.</small></p>"
+    );
+  }
+
+  function parsearArbolExpresion(expr) {
+    let s = expr.trim();
+    while (s.startsWith("(") && s.endsWith(")") && parentesisBalanceados(s.slice(1, -1))) {
+      s = s.slice(1, -1).trim();
+    }
+
+    // Buscar operadores de menor precedencia de derecha a izquierda para encadenar limpio
+    const ops = ["<->", "->", " v ", " ^ "];
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      const idx = buscarUltimoOperadorPrincipal(s, op);
+      if (idx !== -1) {
+        const izq = s.slice(0, idx).trim();
+        const der = s.slice(idx + op.length).trim();
+        let tipo = "AND";
+        if (op === "<->") tipo = "XNOR";
+        else if (op === "->") tipo = "COND";
+        else if (op === " v ") tipo = "OR";
+        else if (op === " ^ ") tipo = "AND";
+
+        return {
+          tipo: tipo,
+          izq: parsearArbolExpresion(izq),
+          der: parsearArbolExpresion(der)
+        };
+      }
+    }
+
+    if (s.startsWith("~")) {
+      return {
+        tipo: "NOT",
+        izq: parsearArbolExpresion(s.slice(1).trim()),
+        der: null
+      };
+    }
+
+    return {
+      tipo: "VAR",
+      label: s,
+      izq: null,
+      der: null
+    };
+  }
+
+  function buscarUltimoOperadorPrincipal(str, op) {
+    let nivel = 0;
+    let ultimo = -1;
+    for (let i = 0; i <= str.length - op.length; i++) {
+      if (str[i] === "(") nivel++;
+      else if (str[i] === ")") nivel--;
+      else if (nivel === 0 && str.slice(i, i + op.length) === op) {
+        ultimo = i;
+      }
+    }
+    return ultimo;
+  }
+
+  function contarHojas(nodo) {
+    if (!nodo) return 1;
+    if (nodo.tipo === "VAR") return 1;
+    if (nodo.tipo === "NOT") return contarHojas(nodo.izq);
+    return contarHojas(nodo.izq) + contarHojas(nodo.der);
+  }
+
+  function renderizarCircuitoSVG(raiz) {
+    const pasoY = 42;
+    const hojas = Math.max(2, contarHojas(raiz));
+    const alto = Math.max(160, hojas * pasoY + 40);
+    const ancho = 760;
+    let sigHojaY = 35;
+    let elementos = "";
+
+    function dibujarNodo(nodo, xDerecha) {
+      if (nodo.tipo === "VAR") {
+        const y = sigHojaY;
+        sigHojaY += pasoY;
+        const xInicio = 45;
+        elementos += `
+          <text x="12" y="${y + 5}" font-size="14" font-weight="bold" fill="#111">${nodo.label}</text>
+          <line x1="${xInicio}" y1="${y}" x2="${xDerecha}" y2="${y}" stroke="#111" stroke-width="2.5"/>
+        `;
+        return { x: xDerecha, y: y };
+      }
+
+      if (nodo.tipo === "NOT") {
+        const entrada = dibujarNodo(nodo.izq, xDerecha - 85);
+        const y = entrada.y;
+        const xTri = xDerecha - 55;
+        const xBurbuja = xDerecha - 12;
+        elementos += `
+          <line x1="${entrada.x}" y1="${y}" x2="${xTri}" y2="${y}" stroke="#111" stroke-width="2.5"/>
+          <polygon points="${xTri},${y - 12} ${xTri - 24 + 24},${y} ${xTri},${y + 12}" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <circle cx="${xBurbuja}" cy="${y}" r="4.5" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <line x1="${xBurbuja + 4.5}" y1="${y}" x2="${xDerecha}" y2="${y}" stroke="#111" stroke-width="2.5"/>
+        `;
+        return { x: xDerecha, y: y };
+      }
+
+      // Compuerta binaria (AND, OR, COND, XNOR)
+      const xComp = xDerecha - 70;
+      const izqPos = dibujarNodo(nodo.izq, xComp - 28);
+      const derPos = dibujarNodo(nodo.der, xComp - 28);
+      const yMid = Math.round((izqPos.y + derPos.y) / 2);
+      const yTop = yMid - 18;
+      const yBot = yMid + 18;
+
+      // Conectar entradas hacia la compuerta
+      elementos += `
+        <line x1="${izqPos.x}" y1="${izqPos.y}" x2="${xComp - 28}" y2="${izqPos.y}" stroke="#111" stroke-width="2.2"/>
+        <line x1="${xComp - 28}" y1="${izqPos.y}" x2="${xComp - 28}" y2="${yMid - 9}" stroke="#111" stroke-width="2.2"/>
+        <line x1="${xComp - 28}" y1="${yMid - 9}" x2="${xComp + 4}" y2="${yMid - 9}" stroke="#111" stroke-width="2.2"/>
+
+        <line x1="${derPos.x}" y1="${derPos.y}" x2="${xComp - 28}" y2="${derPos.y}" stroke="#111" stroke-width="2.2"/>
+        <line x1="${xComp - 28}" y1="${derPos.y}" x2="${xComp - 28}" y2="${yMid + 9}" stroke="#111" stroke-width="2.2"/>
+        <line x1="${xComp - 28}" y1="${yMid + 9}" x2="${xComp + 4}" y2="${yMid + 9}" stroke="#111" stroke-width="2.2"/>
+      `;
+
+      let xSalida = xComp + 46;
+
+      if (nodo.tipo === "AND") {
+        elementos += `
+          <path d="M${xComp},${yTop} L${xComp + 22},${yTop} A18,18 0 0,1 ${xComp + 22},${yBot} L${xComp},${yBot} Z" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <text x="${xComp + 6}" y="${yMid + 4}" font-size="9" font-weight="bold" fill="#333">AND</text>
+        `;
+      } else if (nodo.tipo === "OR" || nodo.tipo === "COND") {
+        const etiqueta = nodo.tipo === "COND" ? "→" : "OR";
+        elementos += `
+          <path d="M${xComp - 2},${yTop} Q${xComp + 14},${yMid} ${xComp - 2},${yBot} Q${xComp + 26},${yBot} ${xComp + 44},${yMid} Q${xComp + 26},${yTop} ${xComp - 2},${yTop} Z" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <text x="${xComp + 13}" y="${yMid + 4}" font-size="9" font-weight="bold" fill="#333">${etiqueta}</text>
+        `;
+        if (nodo.tipo === "COND") {
+          // Burbuja en la entrada superior (~A) para representar A -> B ≡ ~A v B
+          elementos += `<circle cx="${xComp - 6}" cy="${yMid - 9}" r="4" fill="#fff" stroke="#111" stroke-width="2"/>`;
+        }
+      } else if (nodo.tipo === "XNOR") {
+        xSalida = xComp + 52;
+        elementos += `
+          <path d="M${xComp - 8},${yTop} Q${xComp + 8},${yMid} ${xComp - 8},${yBot}" fill="none" stroke="#111" stroke-width="2.2"/>
+          <path d="M${xComp - 2},${yTop} Q${xComp + 14},${yMid} ${xComp - 2},${yBot} Q${xComp + 24},${yBot} ${xComp + 40},${yMid} Q${xComp + 24},${yTop} ${xComp - 2},${yTop} Z" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <circle cx="${xComp + 45}" cy="${yMid}" r="4.5" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <text x="${xComp + 10}" y="${yMid + 4}" font-size="8" font-weight="bold" fill="#333">XNOR</text>
+        `;
+      }
+
+      elementos += `<line x1="${xSalida}" y1="${yMid}" x2="${xDerecha}" y2="${yMid}" stroke="#111" stroke-width="2.5"/>`;
+      return { x: xDerecha, y: yMid };
+    }
+
+    const salidaFinal = dibujarNodo(raiz, ancho - 55);
+    elementos += `
+      <line x1="${salidaFinal.x}" y1="${salidaFinal.y}" x2="${ancho - 28}" y2="${salidaFinal.y}" stroke="#111" stroke-width="2.5"/>
+      <text x="${ancho - 20}" y="${salidaFinal.y + 5}" font-size="15" font-weight="bold" fill="#111">S</text>
+    `;
+
+    return `
+      <div style="overflow-x:auto;">
+        <svg width="${ancho}" height="${alto}" viewBox="0 0 ${ancho} ${alto}" style="display:block; margin:12px auto; background:#f8f9fa; border:1px solid #ccc; border-radius:8px;">
+          ${elementos}
+        </svg>
+      </div>
+    `;
+  }
+</script>
+</BODY>
+</HTML>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
